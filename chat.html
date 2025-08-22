@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Prodapt Chatbot</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f7f8fa;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+  }
+  header {
+    background: #4a90e2;
+    color: white;
+    padding: 14px;
+    text-align: center;
+    font-size: 22px;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  #chat-container { flex: 1; display: flex; overflow: hidden; }
+  #history {
+    width: 280px; border-right: 1px solid #ccc; background: #fff;
+    padding: 12px; overflow-y: auto;
+  }
+  #history h3 { margin-top: 0; font-size: 16px; text-align: center; }
+  #history-list li {
+    cursor: pointer; margin: 6px 0; padding: 6px;
+    border-radius: 6px; font-size: 14px;
+  }
+  #history-list li:hover { background-color: #e5e5ea; }
+  #chat-box { flex: 1; display: flex; flex-direction: column; padding: 15px; overflow: hidden; }
+  #messages {
+    flex: 1; overflow-y: auto; padding-right: 10px;
+    scroll-behavior: smooth; display: flex; flex-direction: column;
+  }
+  .msg {
+    margin: 8px 0; padding: 10px 14px;
+    border-radius: 12px; max-width: 70%;
+    line-height: 1.5; font-size: 14px;
+    position: relative;
+  }
+  .user { background: #4a90e2; color: white; align-self: flex-end; }
+  .bot { background: #e5e5ea; color: black; align-self: flex-start; }
+  pre {
+    background: #2d2d2d; color: #f8f8f2;
+    padding: 12px; border-radius: 8px;
+    overflow-x: auto; font-family: monospace;
+    margin: 8px 0; position: relative;
+  }
+  .copy-btn {
+    position: absolute; top: 6px; right: 10px;
+    background: #4a90e2; border: none; color: white;
+    font-size: 12px; padding: 4px 8px;
+    border-radius: 6px; cursor: pointer;
+  }
+  .copy-btn.copied { background: #28a745; }
+  #controls { display: flex; gap: 8px; margin-top: 10px; }
+  #user-input {
+    flex: 1; padding: 10px 12px;
+    border-radius: 12px; border: 1px solid #ccc; font-size: 14px;
+  }
+  button {
+    padding: 10px 16px; border: none; border-radius: 12px;
+    background: #4a90e2; color: white; cursor: pointer; font-size: 14px;
+  }
+  button:hover { background: #357ABD; }
+  ul.bullet-list { margin: 6px 0; padding-left: 20px; }
+  ul.bullet-list li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<header>🤖 Prodapt Chatbot</header>
+<div id="chat-container">
+  <div id="history">
+    <h3>History</h3>
+    <ul id="history-list"></ul>
+  </div>
+  <div id="chat-box">
+    <div id="messages"></div>
+    <div id="controls">
+      <select id="language">
+        <option value="en">English</option>
+        <option value="ta">தமிழ்</option>
+        <option value="hi">हिन्दी</option>
+        <option value="fr">Français</option>
+        <option value="es">Español</option>
+      </select>
+      <input type="text" id="user-input" placeholder="Type your message..." />
+      <button onclick="sendMessage()">Send</button>
+      <button id="voice-btn">🎤</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const messagesDiv = document.getElementById("messages");
+const input = document.getElementById("user-input");
+const historyList = document.getElementById("history-list");
+const languageSelect = document.getElementById("language");
+const voiceBtn = document.getElementById("voice-btn");
+let history = [];
+let recognition;
+let recognizing = false;
+
+// Format bullets into <ul><li>
+function formatBullet(text) {
+  const lines = text.split("\n");
+  const ul = document.createElement("ul");
+  ul.className = "bullet-list";
+  let hasBullet = false;
+
+  lines.forEach(line => {
+    if (/^\s*([*•➤-]|\d+\.)\s+/.test(line)) {
+      const li = document.createElement("li");
+      li.textContent = line.replace(/^\s*([*•➤-]|\d+\.)\s+/, "");
+      ul.appendChild(li);
+      hasBullet = true;
+    }
+  });
+
+  return hasBullet ? ul : document.createTextNode(text);
+}
+
+// Render message with code blocks
+function renderMessage(sender, text) {
+  const div = document.createElement("div");
+  div.className = "msg " + sender;
+
+  const codeRegex = /```([\s\S]*?)```/g;
+  let lastIndex = 0, match;
+
+  while ((match = codeRegex.exec(text)) !== null) {
+    const before = text.slice(lastIndex, match.index).trim();
+    if (before) div.appendChild(formatBullet(before));
+
+    const codeBlock = document.createElement("pre");
+    const codeEl = document.createElement("code");
+    codeEl.textContent = match[1].trim();
+
+    const copyBtn = document.createElement("button");
+    copyBtn.textContent = "Copy";
+    copyBtn.className = "copy-btn";
+    copyBtn.onclick = () => {
+      navigator.clipboard.writeText(codeEl.textContent).then(() => {
+        copyBtn.textContent = "Copied!";
+        copyBtn.classList.add("copied");
+        setTimeout(() => {
+          copyBtn.textContent = "Copy";
+          copyBtn.classList.remove("copied");
+        }, 2000);
+      }).catch(() => alert("Copy failed!"));
+    };
+
+    codeBlock.appendChild(copyBtn);
+    codeBlock.appendChild(codeEl);
+    div.appendChild(codeBlock);
+
+    lastIndex = codeRegex.lastIndex;
+  }
+
+  const after = text.slice(lastIndex).trim();
+  if (after) div.appendChild(formatBullet(after));
+
+  messagesDiv.appendChild(div);
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+}
+
+// Save/load history
+function saveToHistory(userMsg, botMsg) {
+  history.push({ user: userMsg, bot: botMsg });
+  const li = document.createElement("li");
+  li.textContent = userMsg;
+  li.onclick = () => loadHistory(userMsg, botMsg);
+  historyList.appendChild(li);
+}
+
+function loadHistory(userMsg, botMsg) {
+  messagesDiv.innerHTML = "";
+  renderMessage("user", userMsg);
+  renderMessage("bot", botMsg);
+}
+
+// Chat send
+async function sendMessage() {
+  const message = input.value.trim();
+  const language = languageSelect.value;
+  if (!message) return;
+
+  renderMessage("user", message);
+  input.value = "";
+
+  try {
+    const res = await fetch("http://127.0.0.1:8000/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, language }),
+    });
+    const data = await res.json();
+    const reply = data.reply || "⚠️ Error";
+    renderMessage("bot", reply);
+    saveToHistory(message, reply);
+  } catch {
+    renderMessage("bot", "⚠️ Server unreachable");
+  }
+}
+
+// Voice input
+function startVoice() {
+  if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+    alert("Your browser does not support Speech Recognition.");
+    return;
+  }
+
+  if (recognizing) {
+    recognition.stop();
+    recognizing = false;
+    voiceBtn.textContent = "🎤";
+    return;
+  }
+
+  recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  recognition.lang = languageSelect.value === "ta" ? "ta-IN" :
+                     languageSelect.value === "hi" ? "hi-IN" :
+                     languageSelect.value === "fr" ? "fr-FR" :
+                     languageSelect.value === "es" ? "es-ES" : "en-US";
+  recognition.interimResults = false;
+  recognition.continuous = false;
+
+  recognition.onstart = () => {
+    recognizing = true;
+    voiceBtn.textContent = "🎙️ Listening...";
+  };
+
+  recognition.onresult = (event) => {
+    input.value = event.results[0][0].transcript;
+    sendMessage();
+  };
+
+  recognition.onerror = (event) => {
+    console.error("Speech recognition error", event.error);
+  };
+
+  recognition.onend = () => {
+    recognizing = false;
+    voiceBtn.textContent = "🎤";
+  };
+
+  recognition.start();
+}
+
+voiceBtn.addEventListener("click", startVoice);
+input.addEventListener("keypress", e => { if (e.key === "Enter") sendMessage(); });
+</script>
+</body>
+</html>
