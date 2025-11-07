@@ -184,10 +184,9 @@ function loadHistory(userMsg, botMsg) {
   renderMessage("bot", botMsg);
 }
 
-// Chat send
+// Send chat message
 async function sendMessage() {
   const message = input.value.trim();
-  const language = languageSelect.value;
   if (!message) return;
 
   renderMessage("user", message);
@@ -197,7 +196,7 @@ async function sendMessage() {
     const res = await fetch("http://127.0.0.1:8000/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, language }),
+      body: JSON.stringify({ message }),
     });
     const data = await res.json();
     const reply = data.reply || "⚠️ Error";
